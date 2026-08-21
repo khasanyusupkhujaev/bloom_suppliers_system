@@ -141,6 +141,15 @@ let state = {
   notifications: [],
   users: [],
   suppliers: [],
+  role: "anonymous",
+  applications: [],
+  approvedProducts: [],
+  applicationStatuses: {},
+  applicationFieldDefinitions: { supplier: [], manager: [] },
+  applicationCounters: {},
+  selectedApplicationId: null,
+  filters: { search: "", status: "", category: "", brand: "", supplier: "", manager: "" },
+  modal: null,
   error: "",
 };
 
@@ -175,7 +184,13 @@ async function loadWorkspace() {
 
 function applyWorkspace(workspace) {
   state.user = workspace.user;
+  state.role = workspace.role || "anonymous";
   state.categories = workspace.categories || [];
+  state.applications = workspace.applications || [];
+  state.approvedProducts = workspace.approvedProducts || [];
+  state.applicationStatuses = workspace.applicationStatuses || {};
+  state.applicationFieldDefinitions = workspace.applicationFieldDefinitions || { supplier: [], manager: [] };
+  state.applicationCounters = workspace.applicationCounters || {};
   state.categoryManagers = workspace.categoryManagers || {};
   state.staff = workspace.staff || [];
   state.proposals = workspace.proposals || [];
@@ -443,43 +458,77 @@ window.registerSupplier = async (event) => {
 
 function shell() {
   return `
-    <header class="topbar">
-      <div class="brand"><div class="mark">B</div><div><h1>BLOOM</h1><p>${t("subtitle")}</p></div></div>
-      <div class="actions">
-        <select onchange="setLang(this.value)">
-          <option value="en" ${state.lang === "en" ? "selected" : ""}>English</option>
-          <option value="ru" ${state.lang === "ru" ? "selected" : ""}>Русский</option>
-        </select>
-        <button class="secondary" onclick="logout()">${t("logout")}</button>
-      </div>
-    </header>
-    <div class="layout">
-      <aside class="sidebar">
-        <div class="identity"><strong>${esc(state.user.name)}</strong><span>${state.user.role} · ${esc(state.user.email)}</span></div>
-        <nav class="nav">
-          ${nav("dashboard", t("dashboard"))}
-          ${state.user.role === "supplier" ? nav("new", t("newProposal")) : ""}
-          ${state.user.role === "supplier" ? nav("profile", t("profile")) : ""}
-          ${["manager", "admin", "superadmin"].includes(state.user.role) ? nav("assignments", t("assignments")) : ""}
-          ${["admin", "superadmin"].includes(state.user.role) ? nav("users", t("users")) : ""}
-          ${nav("products", t("products"))}
-          ${nav("notifications", t("notifications"))}
-        </nav>
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <a class="app-logo" href="#" onclick="go('dashboard'); return false;">${bloomLogo()}</a>
+        ${state.role === "supplier" ? `<button class="sidebar-cta" onclick="createApplication()">+ Добавить товар</button>` : ""}
+        <nav class="side-nav">${sidebarItems().map(sideNavItem).join("")}</nav>
+        <div class="sidebar-bottom">
+          ${sideNavItem({ page: "notifications", label: "Уведомления", count: state.notifications.length })}
+          <button class="side-link" onclick="logout()">Выйти</button>
+        </div>
       </aside>
-      <main class="main">
+      <div class="app-frame">
+        <header class="app-topbar">
+          <div><p class="topbar-kicker">Bloom Supplier Portal</p><h1>${pageTitle()}</h1></div>
+          <button class="profile-chip" onclick="go('profile')">
+            <span><strong>${esc(state.user.name)}</strong><small>${roleLabel(state.role)}</small></span>
+            <i>${initials(state.user.name)}</i>
+          </button>
+        </header>
+        <main class="main">
         ${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}
         ${page()}
-      </main>
+        </main>
+      </div>
+      ${state.modal ? modal() : ""}
     </div>
   `;
 }
 
-function nav(page, label) {
-  return `<button class="${state.page === page ? "active" : ""}" onclick="go('${page}')">${label}</button>`;
+function sidebarItems() {
+  if (state.role === "supplier") {
+    return [
+      { page: "dashboard", label: "Главная" },
+      { page: "applications", label: "Все заявки", count: state.applications.length },
+      { page: "drafts", label: "Черновики", count: state.applicationCounters.drafts },
+      { page: "review", label: "На рассмотрении", count: state.applicationCounters.managerQueue + state.applicationCounters.ccoQueue },
+      { page: "returned", label: "Возвращённые", count: state.applicationCounters.returnedSupplier },
+      { page: "approved", label: "Одобренные товары", count: state.approvedProducts.length },
+      { page: "documents", label: "Документы" },
+    ];
+  }
+  if (state.role === "cco") {
+    return [
+      { page: "dashboard", label: "Главная" },
+      { page: "ccoQueue", label: "На согласование", count: state.applicationCounters.ccoQueue, prominent: true },
+      { page: "returnedManager", label: "Возвращённые", count: state.applicationCounters.returnedManager },
+      { page: "approved", label: "Одобренные", count: state.applicationCounters.approved },
+      { page: "declined", label: "Отклонённые", count: state.applicationCounters.declined },
+      { page: "applications", label: "Все заявки", count: state.applications.length },
+    ];
+  }
+  return [
+    { page: "dashboard", label: "Главная" },
+    { page: "managerQueue", label: "Поступившие", count: countBy(["SUBMITTED_TO_MANAGER"]) },
+    { page: "managerTasks", label: "Мои задачи", count: countBy(["MANAGER_REVIEW", "RETURNED_TO_MANAGER"]) },
+    { page: "returned", label: "Возвращённые", count: countBy(["RETURNED_TO_SUPPLIER"]) },
+    { page: "sentCco", label: "Отправленные CCO", count: countBy(["SUBMITTED_TO_CCO", "CCO_REVIEW"]) },
+    { page: "applications", label: "Архив", count: state.applications.length },
+    { page: "suppliers", label: "Поставщики", count: state.suppliers.length },
+    { page: "approved", label: "Товары", count: state.approvedProducts.length },
+    { page: "documents", label: "Документы" },
+  ];
+}
+
+function sideNavItem(item) {
+  const active = state.page === item.page || (state.page === "detail" && item.page === "applications");
+  return `<button class="side-link ${active ? "active" : ""} ${item.prominent && item.count ? "prominent" : ""}" onclick="go('${item.page}')"><span>${item.label}</span>${item.count ? `<b>${item.count}</b>` : ""}</button>`;
 }
 
 window.go = async (page) => {
   state.page = page;
+  state.selectedApplicationId = page === "new" ? null : state.selectedApplicationId;
   render();
 };
 
@@ -496,170 +545,204 @@ window.logout = async () => {
 };
 
 function page() {
-  if (state.page === "new") return newProposal();
+  if (state.page === "new") return applicationDetail(null);
+  if (state.page === "detail") return applicationDetail(selectedApplication());
   if (state.page === "profile") return profile();
-  if (state.page === "assignments") return assignments();
-  if (state.page === "users") return usersDashboard();
-  if (state.page === "products") return products();
+  if (state.page === "approved") return approvedProductsPage();
   if (state.page === "notifications") return notifications();
+  if (state.page === "suppliers") return suppliersPage();
+  if (state.page === "documents") return simplePage("Документы", "Раздел документов подготовлен для будущих требований и шаблонов.");
+  if (["applications", "drafts", "review", "returned", "managerQueue", "managerTasks", "returnedManager", "sentCco", "ccoQueue", "declined"].includes(state.page)) return applicationList();
   return dashboard();
 }
 
 function dashboard() {
+  if (state.role === "supplier") return supplierDashboard();
+  if (state.role === "cco") return ccoDashboard();
+  return managerDashboard();
+}
+
+function supplierDashboard() {
   return `
-    <section class="panel">
-      <div class="head"><div><h2>${t("dashboard")}</h2><p>${state.proposals.length} ${t("all").toLowerCase()}</p></div></div>
-      <div class="filters">
-        <input id="search" placeholder="${t("search")}" oninput="filterRows()" />
-        <select id="status" onchange="filterRows()">
-          <option value="">${t("all")} ${t("status").toLowerCase()}</option>
-          <option>Submitted</option><option>Under Review</option><option>Approved</option><option>Rejected</option>
-        </select>
-      </div>
-      ${proposalTable()}
+    <section class="dash-hero">
+      <div><p>Поставщик</p><h2>Управляйте новыми товарами для Bloom</h2><span>Создавайте заявки, отслеживайте статусы и получайте Bloom ID после финального одобрения.</span></div>
+      <button class="primary" onclick="createApplication()">+ Добавить новый товар</button>
     </section>
-    ${state.proposals.map(proposalDetail).join("")}
+    <div class="metric-grid">
+      ${metric("Черновики", state.applicationCounters.drafts)}
+      ${metric("На рассмотрении", state.applicationCounters.managerQueue + state.applicationCounters.ccoQueue)}
+      ${metric("Требуют исправления", state.applicationCounters.returnedSupplier)}
+      ${metric("Одобренные товары", state.approvedProducts.length)}
+    </div>
+    ${applicationList(filteredApplicationsForPage("recent"), "Последние заявки")}
   `;
 }
 
-function proposalTable() {
-  if (!state.proposals.length) return `<div class="empty">${t("noRows")}</div>`;
+function managerDashboard() {
   return `
-    <div class="table-wrap">
-      <table id="proposalTable">
-        <thead><tr><th>ID</th><th>${t("supplier")}</th><th>${t("brandName")}</th><th>${t("category")}</th><th>${t("status")}</th><th>${t("assignedCm")}</th><th>${t("submitted")}</th><th>${t("actions")}</th></tr></thead>
-        <tbody>${state.proposals.map((proposal) => `
-          <tr data-search="${escAttr([proposal.id, proposal.supplier?.legalName, proposal.brandName, proposal.category, proposal.status, proposal.assignedCmEmail].join(" ").toLowerCase())}" data-status="${proposal.status}">
-            <td><strong>${proposal.id}</strong></td><td>${esc(proposal.supplier?.legalName || "")}</td><td>${esc(proposal.brandName)}</td><td>${esc(proposal.category)}</td>
-            <td>${badge(proposal.status)}</td><td>${esc(cmName(proposal.assignedCmEmail) || "-")}</td><td>${date(proposal.submittedAt)}</td><td>${managerAssign(proposal)}</td>
-          </tr>`).join("")}</tbody>
+    <div class="metric-grid">
+      ${metric("Новые заявки", countBy(["SUBMITTED_TO_MANAGER"]))}
+      ${metric("Мои задачи", countBy(["MANAGER_REVIEW", "RETURNED_TO_MANAGER"]))}
+      ${metric("Возвращённые", countBy(["RETURNED_TO_SUPPLIER"]))}
+      ${metric("Ожидают решения CCO", countBy(["SUBMITTED_TO_CCO", "CCO_REVIEW"]))}
+    </div>
+    ${applicationList(filteredApplicationsForPage("managerQueue"), "Поступившие заявки")}
+  `;
+}
+
+function ccoDashboard() {
+  return `
+    <section class="dash-hero cco-focus">
+      <div><p>CCO Review</p><h2>${state.applicationCounters.ccoQueue || 0} заявок ожидают решения</h2><span>Финальное одобрение создает постоянный Bloom ID для товара.</span></div>
+      <button class="primary" onclick="go('ccoQueue')">Открыть очередь</button>
+    </section>
+    <div class="metric-grid">
+      ${metric("Ожидают моего решения", state.applicationCounters.ccoQueue)}
+      ${metric("Одобрено", state.applicationCounters.approved)}
+      ${metric("Возвращено", state.applicationCounters.returnedManager + state.applicationCounters.returnedSupplier)}
+      ${metric("Отклонено", state.applicationCounters.declined)}
+    </div>
+    ${applicationList(filteredApplicationsForPage("ccoQueue"), "На согласование")}
+  `;
+}
+
+function applicationList(applications = filteredApplicationsForPage(state.page), title = "Заявки") {
+  return `
+    <section class="work-panel">
+      <div class="list-head"><div><h2>${title}</h2><p>${applications.length} записей</p></div>${state.role === "supplier" ? `<button class="primary" onclick="createApplication()">+ Добавить товар</button>` : ""}</div>
+      ${filters()}
+      ${applications.length ? applicationTable(applications) : `<div class="empty">Нет заявок.</div>`}
+    </section>
+  `;
+}
+
+function filters() {
+  return `
+    <div class="app-filters">
+      <input placeholder="Поиск по номеру, товару, бренду" value="${escAttr(state.filters.search)}" oninput="setFilter('search', this.value)" />
+      <select onchange="setFilter('status', this.value)"><option value="">Все статусы</option>${Object.entries(state.applicationStatuses).map(([key, label]) => `<option value="${key}" ${state.filters.status === key ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>
+      <select onchange="setFilter('category', this.value)"><option value="">Все категории</option>${state.categories.map((item) => `<option value="${escAttr(item)}" ${state.filters.category === item ? "selected" : ""}>${esc(item)}</option>`).join("")}</select>
+      <input placeholder="Бренд" value="${escAttr(state.filters.brand)}" oninput="setFilter('brand', this.value)" />
+      ${state.role !== "supplier" ? `<input placeholder="Поставщик" value="${escAttr(state.filters.supplier)}" oninput="setFilter('supplier', this.value)" />` : ""}
+    </div>
+  `;
+}
+
+function applicationTable(applications) {
+  return `
+    <div class="table-wrap app-table-wrap">
+      <table class="app-table">
+        <thead><tr><th>№ заявки</th><th>Статус</th><th>Товар</th><th>Категория</th><th>Бренд</th><th>Поставщик</th><th>Менеджер</th><th>Создана</th><th>Изменена</th><th>Действие</th></tr></thead>
+        <tbody>${applications.map((item) => `
+          <tr>
+            <td><button class="link-button" onclick="openApplication('${item.id}')">${item.id}</button>${item.bloomId ? `<small>Bloom ID ${item.bloomId}</small>` : ""}</td>
+            <td>${statusBadge(item.status)}</td>
+            <td><strong>${esc(item.supplierData.productName || "Новый товар")}</strong></td>
+            <td>${esc(item.supplierData.category || "-")}</td>
+            <td>${esc(item.supplierData.brandName || "-")}</td>
+            <td>${esc(item.supplier?.legalName || "-")}</td>
+            <td>${esc(managerName(item.assignedManagerEmail))}</td>
+            <td>${shortDate(item.createdAt)}</td>
+            <td>${shortDate(item.updatedAt)}</td>
+            <td><button class="secondary" onclick="openApplication('${item.id}')">Открыть</button></td>
+          </tr>
+        `).join("")}</tbody>
       </table>
+    </div>`;
+}
+
+function applicationDetail(application) {
+  const isNew = !application;
+  const draft = application || {
+    id: "",
+    status: "DRAFT",
+    statusLabel: "Черновик",
+    supplierData: {},
+    managerData: {},
+    history: [],
+    supplier: state.user.supplier,
+  };
+  return `
+    <div class="detail-layout">
+      <section class="application-form-shell">
+        <button class="back-link" onclick="go('applications')">← Назад</button>
+        <div class="detail-title"><h2>${isNew ? "Новый товар" : `Заявка ${draft.id}`}</h2><p>${esc(draft.supplier?.legalName || state.user.supplier?.legalName || "Bloom Beauty")}</p></div>
+        ${lastComment(draft) ? `<div class="return-note"><strong>Комментарий</strong><p>${esc(lastComment(draft))}</p></div>` : ""}
+        <form id="applicationForm" class="application-form">
+          ${renderFieldSections("supplier", draft)}
+          ${state.role !== "supplier" ? renderFieldSections("manager", draft) : ""}
+        </form>
+      </section>
+      ${actionPanel(draft, isNew)}
     </div>
   `;
 }
 
-function managerAssign(proposal) {
-  if (!["manager", "admin", "superadmin"].includes(state.user.role)) return "";
-  const cms = state.staff.filter((user) => user.role === "cm");
-  return `<div class="row"><select id="assign-${proposal.id}">${cms.map((cm) => `<option value="${cm.email}" ${proposal.assignedCmEmail === cm.email ? "selected" : ""}>${esc(cm.name)}</option>`).join("")}</select><button class="secondary" onclick="assignProposal('${proposal.id}')">${t("assign")}</button></div>`;
+function renderFieldSections(scope, application) {
+  const defs = state.applicationFieldDefinitions[scope] || [];
+  const data = scope === "supplier" ? application.supplierData : application.managerData;
+  const editable = canEditScope(scope, application.status);
+  const sections = [...new Set(defs.map((field) => field.section))];
+  return `
+    <div class="form-block ${scope === "manager" ? "internal" : ""}">
+      <h3>${scope === "supplier" ? "Данные поставщика" : "Данные Bloom / Заполняется менеджером"}</h3>
+      ${sections.map((sectionName) => `
+        <details class="form-section" open>
+          <summary>${esc(sectionName)}</summary>
+          <div class="field-grid">${defs.filter((field) => field.section === sectionName).map((field) => appField(scope, field, data[field.key], editable)).join("")}</div>
+        </details>
+      `).join("")}
+    </div>`;
 }
 
-function proposalDetail(proposal) {
-  const canDirector = state.user.role === "director" || state.user.role === "superadmin";
-  const canCm = state.user.role === "cm" || state.user.role === "superadmin";
+function appField(scope, field, value, editable) {
+  const name = `${scope}.${field.key}`;
+  const required = field.required ? "required" : "";
+  const disabled = editable ? "" : "disabled";
+  const label = `${esc(field.label)}${field.required ? " *" : ""}`;
+  if (field.type === "textarea") return `<label class="app-field wide"><span>${label}</span><textarea name="${name}" ${required} ${disabled}>${esc(value || "")}</textarea></label>`;
+  if (field.type === "select") return `<label class="app-field"><span>${label}</span><select name="${name}" ${required} ${disabled}>${(field.options || []).map((option) => `<option value="${escAttr(option)}" ${String(value || "") === String(option) ? "selected" : ""}>${esc(option)}</option>`).join("")}</select></label>`;
+  return `<label class="app-field"><span>${label}</span><input name="${name}" type="${field.type || "text"}" value="${escAttr(value || "")}" ${required} ${disabled}></label>`;
+}
+
+function actionPanel(application, isNew) {
   return `
-    <section class="panel">
-      <div class="head">
-        <div><h3>${proposal.id} · ${esc(proposal.brandName)}</h3><p>${esc(proposal.category)} · ${esc(cmName(proposal.assignedCmEmail) || "")}</p></div>
-        <div class="summary">${tile(proposal.counts.proposed, "proposed")}${tile(proposal.counts.selected, "selected")}${tile(proposal.counts.rejected, "rejected")}${tile(proposal.counts.underReview, "review")}</div>
-      </div>
-      ${canCm ? `<button class="primary" onclick="sendFinal('${proposal.id}')">${t("sendFinal")}</button>` : ""}
-      ${proposal.skus.map((sku) => skuCard(proposal, sku, canCm, canDirector)).join("")}
+    <aside class="action-panel">
+      <span class="panel-label">Статус заявки</span>
+      ${statusBadge(application.status)}
+      <div class="panel-id">${isNew ? "Новая заявка" : application.id}</div>
+      ${application.bloomId ? `<div class="bloom-id"><span>Bloom ID</span><strong>${application.bloomId}</strong></div>` : ""}
+      <button class="secondary full-button" onclick="showHistory('${application.id || ""}')">История согласований</button>
+      <div class="panel-actions">${contextActions(application, isNew)}</div>
+    </aside>
+  `;
+}
+
+function contextActions(application, isNew) {
+  if (state.role === "supplier" && (isNew || ["DRAFT", "RETURNED_TO_SUPPLIER"].includes(application.status))) {
+    return `<button class="secondary full-button" onclick="saveApplication(${isNew})">Сохранить черновик</button><button class="primary full-button" onclick="submitManager(${isNew})">${application.status === "RETURNED_TO_SUPPLIER" ? "Повторно отправить" : "Отправить менеджеру"}</button>`;
+  }
+  if (state.role === "manager" && ["SUBMITTED_TO_MANAGER", "MANAGER_REVIEW", "RETURNED_TO_MANAGER"].includes(application.status)) {
+    return `${application.status !== "MANAGER_REVIEW" ? `<button class="secondary full-button" onclick="startManager('${application.id}')">Начать проверку</button>` : ""}<button class="secondary full-button" onclick="saveApplication(false)">Сохранить черновик</button><button class="secondary full-button" onclick="openCommentModal('returnSupplier','${application.id}')">Вернуть поставщику</button><button class="primary full-button" onclick="submitCco('${application.id}')">Отправить CCO</button>`;
+  }
+  if (state.role === "cco" && ["SUBMITTED_TO_CCO", "CCO_REVIEW"].includes(application.status)) {
+    return `<button class="secondary full-button" onclick="openCommentModal('returnManager','${application.id}')">Вернуть на доработку</button><button class="danger full-button" onclick="openCommentModal('decline','${application.id}')">Отклонить</button><button class="primary full-button" onclick="openCommentModal('approve','${application.id}')">Одобрить товар</button>`;
+  }
+  return `<p class="panel-muted">Нет доступных действий для текущего статуса.</p>`;
+}
+
+function approvedProductsPage() {
+  return `
+    <section class="work-panel">
+      <div class="list-head"><div><h2>Одобренные товары</h2><p>${state.approvedProducts.length} товаров с Bloom ID</p></div></div>
+      ${state.approvedProducts.length ? `<div class="table-wrap"><table class="app-table"><thead><tr><th>Bloom ID</th><th>Товар</th><th>Бренд</th><th>Категория</th><th>Поставщик</th><th>Одобрен</th></tr></thead><tbody>${state.approvedProducts.map((product) => `<tr><td><strong>${esc(product.bloomId)}</strong></td><td>${esc(product.productName)}</td><td>${esc(product.brandName)}</td><td>${esc(product.category)}</td><td>${esc(supplierName(product.supplierId))}</td><td>${shortDate(product.approvedAt)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">Пока нет одобренных товаров.</div>`}
     </section>
   `;
 }
-
-function skuCard(proposal, sku, canCm, canDirector) {
-  return `
-    <article class="sku ${sku.duplicateEan ? "duplicate" : ""}">
-      <div class="head"><div><h3>${esc(sku.productName)}</h3><p>${esc(sku.ean)} · ${esc(sku.volume)} · ${esc(sku.dimensions)}</p></div>${badge(sku.state)}</div>
-      ${sku.duplicateEan ? `<div class="notice">${t("duplicate")}</div>` : ""}
-      <div class="grid three">
-        <div><strong>${t("priceExVat")}</strong><br>${money(sku.priceExVat, sku.currency)}</div>
-        <div><strong>${t("priceIncVat")}</strong><br>${money(sku.priceIncVat, sku.currency)}</div>
-        <div><strong>${t("rrp")}</strong><br>${money(sku.rrp, sku.currency)}</div>
-        <div><strong>${t("casePack")}</strong><br>${esc(sku.casePack)}</div>
-        <div><strong>${t("shelfLife")}</strong><br>${esc(sku.shelfLife)}</div>
-        <div class="photo">${t("frontPhoto")}: ${esc(sku.frontPhoto)}<br>${t("backPhoto")}: ${esc(sku.backPhoto)}</div>
-      </div>
-      <p class="small"><strong>${t("competitor")}:</strong> ${sku.competitors.map((item) => `${esc(item.name)} ${money(item.price, item.currency)}`).join(", ") || "-"}</p>
-      <div class="actions">
-        ${canCm ? `<button class="secondary" onclick="cmDecision('${sku.id}','Selected / Recommended')">${t("select")}</button><button class="danger" onclick="cmDecision('${sku.id}','Rejected by CM')">${t("reject")}</button><button class="ghost" onclick="cmDecision('${sku.id}','Under Review')">${t("keep")}</button>` : ""}
-        ${canDirector && sku.state === "Pending Commercial Director" ? `<button class="primary" onclick="finalDecision('${sku.id}','Approved')">${t("approve")}</button><button class="danger" onclick="finalDecision('${sku.id}','Rejected by Commercial Director')">${t("reject")}</button>` : ""}
-      </div>
-    </article>
-  `;
-}
-
-function newProposal() {
-  return `
-    <section class="panel">
-      <div class="head"><div><h2>${t("newProposal")}</h2><p>${esc(state.user.supplier?.legalName || "")}</p></div></div>
-      <form id="proposalForm" onsubmit="submitProposal(event)">
-        <div class="grid">
-          ${field("brandName", t("brandName"))}
-          <div class="field"><label>${t("category")}</label><select name="category" required>${state.categories.map((item) => `<option>${esc(item)}</option>`).join("")}</select></div>
-          ${field("brandLink", t("brandLink"), "url", "", false)}
-          <div class="field full"><label>${t("brandDescription")}</label><textarea name="brandDescription"></textarea></div>
-        </div>
-        <div id="skuList">${skuForm(0)}</div>
-        <div class="actions"><button type="button" class="secondary" onclick="addSku()">${t("addSku")}</button><button class="primary">${t("submit")}</button></div>
-      </form>
-    </section>
-  `;
-}
-
-function skuForm(index) {
-  return `
-    <div class="sku" data-sku>
-      <div class="head"><h3>SKU ${index + 1}</h3></div>
-      <div class="grid three">
-        ${field("productName", t("productName"))}${field("ean", t("ean"))}${field("volume", t("volume"))}
-        ${field("dimensions", t("dimensions"))}${field("priceExVat", t("priceExVat"), "number")}${field("priceIncVat", t("priceIncVat"), "number")}
-        ${field("currency", t("currency"), "text", "UZS")}${field("rrp", t("rrp"), "number")}${field("casePack", t("casePack"))}
-        ${field("shelfLife", t("shelfLife"))}${field("frontPhoto", t("frontPhoto"), "url", "https://placehold.co/420x520?text=Front")}${field("backPhoto", t("backPhoto"), "url", "https://placehold.co/420x520?text=Back")}
-      </div>
-      <div data-competitors>${competitorForm()}</div>
-      <button type="button" class="ghost" onclick="addCompetitor(this)">${t("addCompetitor")}</button>
-    </div>
-  `;
-}
-
-function competitorForm() {
-  return `<div class="grid three" data-competitor>${field("competitorName", t("competitor"))}${field("competitorPrice", t("competitorPrice"), "number")}${field("competitorUrl", t("productUrl"), "url", "", false)}</div>`;
-}
-
-window.addSku = () => {
-  document.getElementById("skuList").insertAdjacentHTML("beforeend", skuForm(document.querySelectorAll("[data-sku]").length));
-};
-
-window.addCompetitor = (button) => {
-  button.previousElementSibling.insertAdjacentHTML("beforeend", competitorForm());
-};
-
-window.submitProposal = async (event) => {
-  event.preventDefault();
-  await run(async () => {
-    const rootData = formData(event.target);
-    const skus = [...document.querySelectorAll("[data-sku]")].map((skuNode) => {
-      const inputs = formData(skuNode);
-      return {
-        productName: inputs.productName,
-        ean: inputs.ean,
-        volume: inputs.volume,
-        dimensions: inputs.dimensions,
-        priceExVat: inputs.priceExVat,
-        priceIncVat: inputs.priceIncVat,
-        currency: inputs.currency,
-        rrp: inputs.rrp,
-        casePack: inputs.casePack,
-        shelfLife: inputs.shelfLife,
-        frontPhoto: inputs.frontPhoto,
-        backPhoto: inputs.backPhoto,
-        competitors: [...skuNode.querySelectorAll("[data-competitor]")].map((node) => {
-          const data = formData(node);
-          return { name: data.competitorName, price: data.competitorPrice, currency: inputs.currency, url: data.competitorUrl };
-        }),
-      };
-    });
-    await api("/api/proposals", { method: "POST", body: { ...rootData, skus } });
-    state.page = "dashboard";
-    await loadWorkspace();
-  });
-};
 
 function profile() {
   const supplier = state.user.supplier;
+  if (state.role !== "supplier") return simplePage("Профиль", `${esc(state.user.name)} · ${roleLabel(state.role)}`);
   return `
     <section class="panel">
       <div class="head"><div><h2>${t("profile")}</h2><p>${esc(state.user.email)}</p></div></div>
@@ -682,96 +765,236 @@ window.saveProfile = async (event) => {
   });
 };
 
-function assignments() {
-  const cms = state.staff.filter((user) => user.role === "cm");
+function suppliersPage() {
   return `
-    <section class="panel">
-      <div class="head"><div><h2>${t("assignments")}</h2></div></div>
-      <form class="grid" onsubmit="saveAssignments(event)">
-        ${state.categories.map((category) => `<div class="field"><label>${esc(category)}</label><select name="${escAttr(category)}">${cms.map((cm) => `<option value="${cm.email}" ${state.categoryManagers[category] === cm.email ? "selected" : ""}>${esc(cm.name)}</option>`).join("")}</select></div>`).join("")}
-        <div class="actions full"><button class="primary">${t("save")}</button></div>
-      </form>
-    </section>
-  `;
-}
-
-function usersDashboard() {
-  return `
-    <section class="panel">
-      <div class="head"><div><h2>${t("users")}</h2><p>${state.users.length} accounts · ${state.suppliers.length} suppliers</p></div></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Supplier</th></tr></thead>
-          <tbody>${state.users.map((user) => `
-            <tr>
-              <td>${esc(user.name)}</td>
-              <td>${esc(user.email)}</td>
-              <td>${badge(user.role)}</td>
-              <td>${esc(user.supplier?.legalName || "-")}</td>
-            </tr>
-          `).join("")}</tbody>
-        </table>
-      </div>
-    </section>
-  `;
-}
-
-window.saveAssignments = async (event) => {
-  event.preventDefault();
-  await run(async () => {
-    const result = await api("/api/category-managers", { method: "PATCH", body: formData(event.target) });
-    state.categoryManagers = result.categoryManagers || {};
-  });
-};
-
-function products() {
-  return `
-    <section class="panel">
-      <div class="head"><div><h2>${t("products")}</h2><p>${state.products.length} approved</p></div></div>
-      ${state.products.length ? `<div class="table-wrap"><table><thead><tr><th>EAN</th><th>${t("productName")}</th><th>${t("brandName")}</th><th>${t("category")}</th><th>${t("rrp")}</th></tr></thead><tbody>${state.products.map((product) => `<tr><td>${esc(product.ean)}</td><td>${esc(product.productName)}</td><td>${esc(product.brandName)}</td><td>${esc(product.category)}</td><td>${money(product.rrp, product.currency)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">${t("noRows")}</div>`}
-    </section>
+    <section class="work-panel"><div class="list-head"><div><h2>Поставщики</h2><p>${state.suppliers.length} компаний</p></div></div>
+    <div class="table-wrap"><table class="app-table"><thead><tr><th>Компания</th><th>ИНН</th><th>Email</th><th>Телефон</th></tr></thead><tbody>${state.suppliers.map((supplier) => `<tr><td>${esc(supplier.legalName)}</td><td>${esc(supplier.tin)}</td><td>${esc(supplier.email)}</td><td>${esc(supplier.phone)}</td></tr>`).join("")}</tbody></table></div></section>
   `;
 }
 
 function notifications() {
-  return `<section class="panel"><div class="head"><div><h2>${t("notifications")}</h2></div></div>${state.notifications.length ? state.notifications.map((item) => `<p><strong>${esc(item.type)}</strong><br>${esc(item.message)}<br><span class="muted small">${esc(item.recipientEmail)} · ${date(item.createdAt)}</span></p>`).join("") : `<div class="empty">${t("noRows")}</div>`}</section>`;
+  return `<section class="work-panel"><div class="list-head"><div><h2>Уведомления</h2></div></div>${state.notifications.length ? `<div class="activity-list">${state.notifications.map((item) => `<div class="activity-item"><strong>${esc(item.message)}</strong><span>${esc(item.recipientEmail)} · ${date(item.createdAt)}</span></div>`).join("")}</div>` : `<div class="empty">Нет уведомлений.</div>`}</section>`;
 }
 
-window.assignProposal = async (id) => {
+function pageTitle() {
+  const titles = { dashboard: "Главная", applications: "Заявки", new: "Новый товар", detail: "Заявка", approved: "Одобренные товары", notifications: "Уведомления", profile: "Профиль" };
+  return titles[state.page] || "Заявки";
+}
+
+function roleLabel(role) {
+  return { supplier: "Supplier", manager: "Manager", cco: "CCO", admin: "Admin" }[role] || role;
+}
+
+function initials(name) {
+  return String(name || "B").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function metric(label, value) {
+  return `<article class="metric"><span>${label}</span><strong>${Number(value || 0)}</strong></article>`;
+}
+
+function countBy(statuses) {
+  return state.applications.filter((item) => statuses.includes(item.status)).length;
+}
+
+function filteredApplicationsForPage(page) {
+  const pageStatuses = {
+    drafts: ["DRAFT"],
+    review: ["SUBMITTED_TO_MANAGER", "MANAGER_REVIEW", "SUBMITTED_TO_CCO", "CCO_REVIEW"],
+    returned: state.role === "supplier" ? ["RETURNED_TO_SUPPLIER"] : ["RETURNED_TO_SUPPLIER"],
+    managerQueue: ["SUBMITTED_TO_MANAGER"],
+    managerTasks: ["MANAGER_REVIEW", "RETURNED_TO_MANAGER"],
+    returnedManager: ["RETURNED_TO_MANAGER"],
+    sentCco: ["SUBMITTED_TO_CCO", "CCO_REVIEW"],
+    ccoQueue: ["SUBMITTED_TO_CCO", "CCO_REVIEW"],
+    declined: ["DECLINED"],
+    recent: [],
+  };
+  const statuses = pageStatuses[page] || [];
+  return state.applications
+    .filter((item) => !statuses.length || statuses.includes(item.status))
+    .filter((item) => !state.filters.status || item.status === state.filters.status)
+    .filter((item) => !state.filters.category || item.supplierData.category === state.filters.category)
+    .filter((item) => !state.filters.brand || item.supplierData.brandName.toLowerCase().includes(state.filters.brand.toLowerCase()))
+    .filter((item) => !state.filters.supplier || (item.supplier?.legalName || "").toLowerCase().includes(state.filters.supplier.toLowerCase()))
+    .filter((item) => {
+      const q = state.filters.search.toLowerCase();
+      const haystack = [item.id, item.bloomId, item.supplierData.productName, item.supplierData.brandName, item.supplier?.legalName].join(" ").toLowerCase();
+      return !q || haystack.includes(q);
+    })
+    .slice(0, page === "recent" ? 8 : undefined);
+}
+
+function selectedApplication() {
+  return state.applications.find((item) => item.id === state.selectedApplicationId) || state.applications[0];
+}
+
+function canEditScope(scope, status) {
+  if (scope === "supplier") return state.role === "supplier" && ["DRAFT", "RETURNED_TO_SUPPLIER"].includes(status);
+  if (scope === "manager") return state.role === "manager" && ["SUBMITTED_TO_MANAGER", "MANAGER_REVIEW", "RETURNED_TO_MANAGER"].includes(status);
+  return false;
+}
+
+function formPayload() {
+  const data = Object.fromEntries(new FormData(document.getElementById("applicationForm")).entries());
+  const supplierData = {};
+  const managerData = {};
+  for (const [key, value] of Object.entries(data)) {
+    const [scope, field] = key.split(".");
+    if (scope === "supplier") supplierData[field] = value;
+    if (scope === "manager") managerData[field] = value;
+  }
+  return {
+    ...(Object.keys(supplierData).length ? { supplierData } : {}),
+    ...(Object.keys(managerData).length ? { managerData } : {}),
+  };
+}
+
+window.setFilter = (key, value) => {
+  state.filters[key] = value;
+  render();
+};
+
+window.createApplication = async () => {
+  state.page = "new";
+  state.selectedApplicationId = null;
+  render();
+};
+
+window.openApplication = (id) => {
+  state.selectedApplicationId = id;
+  state.page = "detail";
+  render();
+};
+
+window.saveApplication = async (isNew) => {
   await run(async () => {
-    await api(`/api/proposals/${id}/assign`, { method: "PATCH", body: { cmEmail: document.getElementById(`assign-${id}`).value } });
+    const payload = formPayload();
+    if (isNew) {
+      const result = await api("/api/applications", { method: "POST", body: payload });
+      state.selectedApplicationId = result.application.id;
+    } else {
+      await api(`/api/applications/${selectedApplication().id}`, { method: "PATCH", body: payload });
+    }
+    await loadWorkspace();
+    state.page = "detail";
+  });
+};
+
+window.submitManager = async (isNew) => {
+  await run(async () => {
+    let id = selectedApplication()?.id;
+    const payload = formPayload();
+    if (isNew) {
+      const result = await api("/api/applications", { method: "POST", body: payload });
+      id = result.application.id;
+      state.selectedApplicationId = id;
+    } else {
+      await api(`/api/applications/${id}`, { method: "PATCH", body: payload });
+    }
+    await api(`/api/applications/${id}/submit-manager`, { method: "POST", body: {} });
+    await loadWorkspace();
+    state.page = "applications";
+  });
+};
+
+window.startManager = async (id) => {
+  await run(async () => {
+    await api(`/api/applications/${id}/start-manager`, { method: "POST" });
     await loadWorkspace();
   });
 };
 
-window.cmDecision = async (skuId, decision) => {
+window.submitCco = async (id) => {
   await run(async () => {
-    await api(`/api/skus/${skuId}/cm-decision`, { method: "PATCH", body: { state: decision } });
+    await api(`/api/applications/${id}/submit-cco`, { method: "POST", body: formPayload() });
+    await loadWorkspace();
+    state.page = "sentCco";
+  });
+};
+
+window.openCommentModal = (type, id) => {
+  state.modal = { type, id, comment: "", target: "manager" };
+  render();
+};
+
+window.closeModal = () => {
+  state.modal = null;
+  render();
+};
+
+window.submitModal = async (event) => {
+  event.preventDefault();
+  const data = formData(event.target);
+  const { type, id } = state.modal;
+  await run(async () => {
+    if (type === "returnSupplier") await api(`/api/applications/${id}/return-supplier`, { method: "POST", body: { comment: data.comment } });
+    if (type === "returnManager") await api(`/api/applications/${id}/return-manager`, { method: "POST", body: { comment: data.comment, target: data.target } });
+    if (type === "decline") await api(`/api/applications/${id}/decline`, { method: "POST", body: { comment: data.comment } });
+    if (type === "approve") await api(`/api/applications/${id}/approve`, { method: "POST", body: { comment: data.comment } });
+    state.modal = null;
     await loadWorkspace();
   });
 };
 
-window.sendFinal = async (proposalId) => {
-  await run(async () => {
-    await api(`/api/proposals/${proposalId}/send-final`, { method: "POST" });
-    await loadWorkspace();
-  });
+window.showHistory = (id) => {
+  const application = id ? state.applications.find((item) => item.id === id) : null;
+  state.modal = { type: "history", id, application };
+  render();
 };
 
-window.finalDecision = async (skuId, decision) => {
-  await run(async () => {
-    await api(`/api/skus/${skuId}/final-decision`, { method: "PATCH", body: { state: decision } });
-    await loadWorkspace();
-  });
-};
+function modal() {
+  if (state.modal.type === "history") {
+    const application = state.modal.application || selectedApplication();
+    return `<div class="app-modal"><div class="modal-card wide"><button class="modal-close" onclick="closeModal()">×</button><h2>История согласований</h2><div class="history-list">${(application?.history || []).map(historyItem).join("") || `<div class="empty">История пока пуста.</div>`}</div></div></div>`;
+  }
+  const title = { returnSupplier: "Причина возврата", returnManager: "Комментарий CCO", decline: "Причина отклонения", approve: "Одобрить товар" }[state.modal.type];
+  const actionLabel = { returnSupplier: "Вернуть на доработку", returnManager: "Вернуть на доработку", decline: "Отклонить", approve: "Одобрить товар" }[state.modal.type];
+  return `
+    <div class="app-modal">
+      <form class="modal-card" onsubmit="submitModal(event)">
+        <button type="button" class="modal-close" onclick="closeModal()">×</button>
+        <h2>${title}</h2>
+        ${state.modal.type === "approve" ? `<p>Вы уверены, что хотите одобрить этот товар?</p>` : ""}
+        ${state.modal.type === "returnManager" ? `<label class="app-field"><span>Кому вернуть</span><select name="target"><option value="manager">Менеджеру</option><option value="supplier">Поставщику</option></select></label>` : ""}
+        <label class="app-field wide"><span>Комментарий${state.modal.type === "approve" ? "" : " *"}</span><textarea name="comment" ${state.modal.type === "approve" ? "" : "required"}></textarea></label>
+        <button class="${state.modal.type === "decline" ? "danger" : "primary"} full-button">${actionLabel}</button>
+      </form>
+    </div>`;
+}
 
-window.filterRows = () => {
-  const query = document.getElementById("search").value.toLowerCase();
-  const status = document.getElementById("status").value;
-  document.querySelectorAll("#proposalTable tbody tr").forEach((row) => {
-    row.style.display = row.dataset.search.includes(query) && (!status || row.dataset.status === status) ? "" : "none";
-  });
-};
+function historyItem(item) {
+  return `<article class="history-item"><strong>${date(item.at)}</strong><span>${esc(item.action)}</span><small>${esc(item.actor)} · ${item.fromStatus ? statusText(item.fromStatus) : "—"} → ${statusText(item.toStatus)}</small>${item.comment ? `<p>${esc(item.comment)}</p>` : ""}</article>`;
+}
+
+function statusText(status) {
+  return state.applicationStatuses[status] || status || "—";
+}
+
+function statusBadge(status) {
+  const tone = status === "APPROVED" ? "ok" : status === "DECLINED" ? "bad" : status.includes("RETURNED") ? "warn" : status.includes("CCO") ? "info" : status === "DRAFT" ? "" : "review";
+  return `<span class="status-badge ${tone}"><i></i>${esc(statusText(status))}</span>`;
+}
+
+function lastComment(application) {
+  return application.history?.find((item) => item.comment)?.comment || "";
+}
+
+function managerName(email) {
+  return state.staff.find((user) => user.email === email)?.name || email || "-";
+}
+
+function supplierName(id) {
+  return state.suppliers.find((supplier) => supplier.id === id)?.legalName || state.user.supplier?.legalName || "-";
+}
+
+function shortDate(value) {
+  return value ? new Date(value).toLocaleDateString("ru-RU") : "-";
+}
+
+function simplePage(title, text) {
+  return `<section class="work-panel"><h2>${title}</h2><p class="muted">${text}</p></section>`;
+}
 
 async function run(fn) {
   state.error = "";
