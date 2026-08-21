@@ -5,3 +5,4 @@ node_modules/
 data/db.json
 .vercel/
 .DS_Store
+.env.local
