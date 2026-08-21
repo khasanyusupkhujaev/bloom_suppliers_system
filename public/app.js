@@ -163,32 +163,24 @@ async function api(path, options = {}) {
 }
 
 async function boot() {
-  const me = await api("/api/me");
-  state.user = me.user;
-  state.categories = me.categories || [];
-  state.categoryManagers = me.categoryManagers || {};
-  state.staff = me.staff || [];
-  if (state.user) await loadWorkspace();
+  applyWorkspace(await api("/api/workspace"));
   render();
 }
 
 async function loadWorkspace() {
-  const [proposals, products, notifications] = await Promise.all([
-    api("/api/proposals"),
-    api("/api/products"),
-    api("/api/notifications"),
-  ]);
-  state.proposals = proposals.proposals;
-  state.products = products.products;
-  state.notifications = notifications.notifications;
-  if (["admin", "superadmin"].includes(state.user.role)) {
-    const users = await api("/api/users");
-    state.users = users.users;
-    state.suppliers = users.suppliers;
-  } else {
-    state.users = [];
-    state.suppliers = [];
-  }
+  applyWorkspace(await api("/api/workspace"));
+}
+
+function applyWorkspace(workspace) {
+  state.user = workspace.user;
+  state.categories = workspace.categories || [];
+  state.categoryManagers = workspace.categoryManagers || {};
+  state.staff = workspace.staff || [];
+  state.proposals = workspace.proposals || [];
+  state.products = workspace.products || [];
+  state.notifications = workspace.notifications || [];
+  state.users = workspace.users || [];
+  state.suppliers = workspace.suppliers || [];
 }
 
 function render() {
@@ -431,18 +423,14 @@ window.login = async (event) => {
   event.preventDefault();
   await run(async () => {
     const data = formData(event.target);
-    const result = await api("/api/auth/login", { method: "POST", body: data });
-    state.user = result.user;
-    await loadWorkspace();
+    applyWorkspace(await api("/api/auth/login", { method: "POST", body: data }));
   });
 };
 
 window.registerSupplier = async (event) => {
   event.preventDefault();
   await run(async () => {
-    const result = await api("/api/auth/register", { method: "POST", body: formData(event.target) });
-    state.user = result.user;
-    await loadWorkspace();
+    applyWorkspace(await api("/api/auth/register", { method: "POST", body: formData(event.target) }));
   });
 };
 
@@ -485,7 +473,6 @@ function nav(page, label) {
 
 window.go = async (page) => {
   state.page = page;
-  await loadWorkspace();
   render();
 };
 
@@ -725,9 +712,8 @@ function usersDashboard() {
 window.saveAssignments = async (event) => {
   event.preventDefault();
   await run(async () => {
-    await api("/api/category-managers", { method: "PATCH", body: formData(event.target) });
-    const me = await api("/api/me");
-    state.categoryManagers = me.categoryManagers || {};
+    const result = await api("/api/category-managers", { method: "PATCH", body: formData(event.target) });
+    state.categoryManagers = result.categoryManagers || {};
   });
 };
 
