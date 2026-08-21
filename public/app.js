@@ -264,7 +264,7 @@ function landingHero() {
         </div>
       </div>
       <div class="hero-visual" aria-label="Bloom beauty retail">
-        <img src="https://panel.bloombeauty.uz/uploads/sliders/slider_1781782038.webp" alt="Bloom beauty retail assortment" />
+        <img src="https://avatars.mds.yandex.net/get-altay/16480550/2a00000199e61b28ff00ef4cca1b403afade/orig" alt="Bloom beauty retail interior" />
       </div>
     </section>
   `;
