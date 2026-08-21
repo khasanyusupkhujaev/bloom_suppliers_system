@@ -407,8 +407,8 @@ function authPanel() {
 function loginForm() {
   return `
     <form class="grid" onsubmit="login(event)">
-      ${field("email", t("loginIdentifier"), "text", "sales@aurora.example")}
-      ${field("password", t("password"), "password", "password123")}
+      ${field("email", t("loginIdentifier"), "text")}
+      ${field("password", t("password"), "password")}
       <div class="full actions"><button class="primary">${t("login")}</button></div>
     </form>
   `;
