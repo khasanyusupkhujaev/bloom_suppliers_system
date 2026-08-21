@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Авторизация | BLOOM Supplier Portal</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="login-page">
+    <main class="login-screen">
+      <a class="login-logo" href="./index.html" aria-label="Bloom Beauty">
+        <img src="https://bloombeauty.uz/_nuxt/img/logo.f331bda.svg" alt="Bloom Beauty" />
+      </a>
+
+      <section class="login-card" aria-labelledby="login-title">
+        <h1 id="login-title">Авторизация</h1>
+        <div id="login-error" class="login-error" hidden></div>
+
+        <form id="login-form" class="login-form">
+          <label class="login-field">
+            <span class="sr-only">Email</span>
+            <input name="email" type="text" autocomplete="username" placeholder="Введите email" required />
+          </label>
+
+          <label class="login-field password-field">
+            <span class="sr-only">Пароль</span>
+            <input id="password-input" name="password" type="password" autocomplete="current-password" placeholder="Введите пароль" required />
+            <button id="toggle-password" type="button" aria-label="Показать пароль" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </label>
+
+          <button id="login-submit" class="login-primary" type="submit">Войти</button>
+        </form>
+
+        <div class="login-divider">ИЛИ</div>
+        <button id="corporate-login" class="login-secondary" type="button">Corporate Account</button>
+
+        <div class="login-links">
+          <p><span>Нет аккаунта?</span><a href="./index.html?auth=register">Зарегистрироваться</a></p>
+          <p><span>Забыли пароль?</span><a href="#" id="recover-password">Восстановить пароль</a></p>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./login.js"></script>
+  </body>
+</html>

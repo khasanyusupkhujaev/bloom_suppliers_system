@@ -164,6 +164,8 @@ async function api(path, options = {}) {
 
 async function boot() {
   applyWorkspace(await api("/api/workspace"));
+  const requestedAuth = new URLSearchParams(window.location.search).get("auth");
+  if (!state.user && ["login", "register"].includes(requestedAuth)) state.authMode = requestedAuth;
   render();
 }
 
@@ -204,6 +206,10 @@ function authScreen() {
 }
 
 window.showAuth = (mode) => {
+  if (mode === "login") {
+    window.location.href = "./login.html";
+    return;
+  }
   state.authMode = mode;
   state.error = "";
   render();
@@ -376,20 +382,21 @@ function landingFooter() {
 }
 
 function authPanel() {
+  if (state.authMode === "login") return "";
   return `
-    <div class="auth-overlay" role="dialog" aria-modal="true" aria-label="${state.authMode === "register" ? t("register") : t("login")}">
+    <div class="auth-overlay" role="dialog" aria-modal="true" aria-label="${t("register")}">
       <div class="auth-modal">
         <button class="modal-close" onclick="closeAuth()" aria-label="Закрыть">×</button>
         <div class="auth-modal-brand">
           ${bloomLogo("modal-logo")}
-          <p>${state.authMode === "register" ? "Создайте аккаунт поставщика Bloom" : "Войдите в рабочий портал Bloom"}</p>
+          <p>Создайте аккаунт поставщика Bloom</p>
         </div>
         ${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}
         <div class="tabs">
-          <button class="${state.authMode === "login" ? "primary" : "secondary"}" onclick="showAuth('login')">${t("login")}</button>
-          <button class="${state.authMode === "register" ? "primary" : "secondary"}" onclick="showAuth('register')">${t("register")}</button>
+          <button class="secondary" onclick="showAuth('login')">${t("login")}</button>
+          <button class="primary" onclick="showAuth('register')">${t("register")}</button>
         </div>
-        ${state.authMode === "register" ? registerForm() : loginForm()}
+        ${registerForm()}
         <p class="demo-note">${t("demo")}<br>${t("supplierDemo")} · ${t("managerDemo")} · ${t("directorDemo")} · ${t("superadminDemo")}</p>
       </div>
     </div>
