@@ -8,7 +8,8 @@
   ],
   "functions": {
     "api/index.js": {
-      "maxDuration": 15
+      "maxDuration": 15,
+      "regions": ["syd1"]
     }
   }
 }
