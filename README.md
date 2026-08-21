@@ -34,8 +34,8 @@ Configured for Vercel with `vercel.json`.
 Project:
 
 - GitHub repo: `https://github.com/khasanyusupkhujaev/bloom_suppliers_system.git`
-- Vercel project name: `Bloom_suppliers_system`
-- Domain: `cde.bloom.vercel.com`
+- Vercel project name: `cde-bloom`
+- Production domain: `cde-bloom.vercel.app`
 
 Required Vercel environment variables:
 

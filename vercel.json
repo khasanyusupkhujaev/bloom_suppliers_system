@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "bloom_suppliers_system",
   "rewrites": [
     {
       "source": "/api/(.*)",

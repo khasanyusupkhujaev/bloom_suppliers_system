@@ -125,6 +125,8 @@ let state = {
   lang: localStorage.getItem("bloomLang") || "en",
   user: null,
   page: "dashboard",
+  authMode: null,
+  mobileMenu: false,
   categories: [],
   categoryManagers: {},
   staff: [],
@@ -179,29 +181,212 @@ function render() {
 
 function authScreen() {
   return `
-    <main class="auth">
-      <section class="auth-card">
-        <div class="auth-side">
-          <div class="brand"><div class="mark">B</div><div><h1>BLOOM</h1><p>${t("subtitle")}</p></div></div>
-          <p>${t("demo")}</p>
-          <p class="small">${t("supplierDemo")}<br>${t("managerDemo")}<br>${t("cmDemo")}<br>${t("directorDemo")}</p>
-        </div>
-        <div class="auth-main">
-          ${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}
-          <div class="tabs">
-            <button class="primary" onclick="showAuth('login')">${t("login")}</button>
-            <button class="secondary" onclick="showAuth('register')">${t("register")}</button>
-          </div>
-          <div id="authForm">${loginForm()}</div>
-        </div>
-      </section>
+    <main class="landing">
+      ${landingHeader()}
+      ${landingHero()}
+      ${whyBloom()}
+      ${startSteps()}
+      ${portalFeatures()}
+      ${categorySection()}
+      ${faqSection()}
+      ${landingFooter()}
+      ${state.authMode ? authPanel() : ""}
     </main>
   `;
 }
 
 window.showAuth = (mode) => {
-  document.getElementById("authForm").innerHTML = mode === "register" ? registerForm() : loginForm();
+  state.authMode = mode;
+  state.error = "";
+  render();
 };
+
+window.closeAuth = () => {
+  state.authMode = null;
+  state.error = "";
+  render();
+};
+
+window.toggleMobileMenu = () => {
+  state.mobileMenu = !state.mobileMenu;
+  render();
+};
+
+function bloomLogo(className = "bloom-logo") {
+  return `<img class="${className}" src="https://bloombeauty.uz/_nuxt/img/logo.f331bda.svg" alt="Bloom Beauty" />`;
+}
+
+function landingHeader() {
+  const navItems = [
+    ["#why", "Почему Bloom"],
+    ["#start", "Как начать"],
+    ["#features", "Возможности портала"],
+    ["#categories", "Категории"],
+    ["#faq", "FAQ"],
+  ];
+  return `
+    <header class="landing-header">
+      <div class="landing-container header-inner">
+        <a class="landing-logo" href="#" aria-label="Bloom Beauty">${bloomLogo()}</a>
+        <nav class="landing-nav" aria-label="Основная навигация">
+          ${navItems.map(([href, label]) => `<a href="${href}">${label}</a>`).join("")}
+        </nav>
+        <div class="header-actions">
+          <button class="btn-dark" onclick="showAuth('login')">Войти</button>
+          <button class="btn-coral" onclick="showAuth('register')">Зарегистрироваться</button>
+        </div>
+        <button class="menu-button" onclick="toggleMobileMenu()" aria-label="Открыть меню" aria-expanded="${state.mobileMenu ? "true" : "false"}">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      ${state.mobileMenu ? `
+        <div class="mobile-menu">
+          ${navItems.map(([href, label]) => `<a href="${href}" onclick="toggleMobileMenu()">${label}</a>`).join("")}
+          <button class="btn-dark" onclick="showAuth('login')">Войти</button>
+          <button class="btn-coral" onclick="showAuth('register')">Зарегистрироваться</button>
+        </div>
+      ` : ""}
+    </header>
+  `;
+}
+
+function landingHero() {
+  return `
+    <section class="landing-container hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Bloom Beauty Uzbekistan</span>
+        <h1>Станьте поставщиком Bloom</h1>
+        <p class="hero-lead">Предложите свою продукцию Bloom, пройдите процесс согласования и получите доступ к порталу поставщиков для дальнейшей работы.</p>
+        <button class="btn-coral hero-cta" onclick="showAuth('register')">Стать поставщиком</button>
+        <div class="document-grid" aria-label="Документы для поставщиков">
+          ${documentCard("Требования к поставщикам")}
+          ${documentCard("Требования к качеству поставляемых товаров")}
+        </div>
+      </div>
+      <div class="hero-visual" aria-label="Bloom beauty retail">
+        <img src="https://panel.bloombeauty.uz/uploads/sliders/slider_1781782038.webp" alt="Bloom beauty retail assortment" />
+      </div>
+    </section>
+  `;
+}
+
+function documentCard(title) {
+  return `
+    <a class="document-card" href="#" onclick="event.preventDefault()">
+      <span class="document-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h7l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.8"/><path d="M14 3v5h5M9.5 14.5 12 17m0 0 2.5-2.5M12 17v-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <strong>${title}</strong>
+      <span>Скачать файл</span>
+    </a>
+  `;
+}
+
+function whyBloom() {
+  const items = [
+    ["Доступ к широкой аудитории", "Bloom объединяет покупателей, которые выбирают косметику, уход и парфюмерию премиального уровня."],
+    ["Прозрачный процесс сотрудничества", "Заявки, решения и статусы фиксируются в едином цифровом пространстве."],
+    ["Быстрое рассмотрение заявок", "Категорийные менеджеры получают полную карточку SKU и коммерческие данные сразу."],
+    ["Удобный портал поставщика", "Поставщик видит свои предложения, решения по SKU и дальнейшие шаги."],
+  ];
+  return section("why", "Почему Bloom", "Партнерство с Bloom строится вокруг качества, доверия и аккуратного коммерческого процесса.", `
+    <div class="benefit-grid">${items.map(([title, text]) => `
+      <article class="benefit-card"><span></span><h3>${title}</h3><p>${text}</p></article>
+    `).join("")}</div>
+  `);
+}
+
+function startSteps() {
+  const steps = [
+    ["01", "Подайте заявку", "Зарегистрируйтесь и отправьте коммерческое предложение с SKU."],
+    ["02", "Пройдите проверку", "Bloom рассмотрит бренд, категорию, цены, фотографии и EAN."],
+    ["03", "Согласуйте условия", "Категорийный менеджер выберет подходящие SKU для финального решения."],
+    ["04", "Начните сотрудничество", "Одобренные товары переходят в рабочий контур поставщика."],
+  ];
+  return section("start", "Как начать", "Четкий путь от первого предложения до утвержденных товаров.", `
+    <div class="steps">${steps.map(([number, title, text]) => `
+      <article class="step"><strong>${number}</strong><h3>${title}</h3><p>${text}</p></article>
+    `).join("")}</div>
+  `);
+}
+
+function portalFeatures() {
+  const features = ["Управлять товарами", "Подавать новые SKU", "Отслеживать статус заявок", "Работать с документами", "Получать уведомления"];
+  return section("features", "Возможности портала", "После регистрации поставщики и команда Bloom работают в едином цифровом процессе.", `
+    <div class="feature-list">${features.map((item) => `
+      <div class="feature-item"><span aria-hidden="true">✓</span>${item}</div>
+    `).join("")}</div>
+  `);
+}
+
+function categorySection() {
+  const categories = ["Макияж", "Уход за лицом", "Парфюмерия", "Уход за волосами", "Тело и гигиена", "Lifestyle"];
+  return section("categories", "Категории", "Bloom работает с ассортиментом, который помогает клиентам создавать персональный beauty-ритуал.", `
+    <div class="category-grid">${categories.map((item) => `<div class="category-pill">${item}</div>`).join("")}</div>
+  `);
+}
+
+function faqSection() {
+  const faqs = [
+    ["Кто может зарегистрироваться?", "Юридическое лицо, готовое предложить ассортимент для рассмотрения Bloom."],
+    ["Можно ли предложить несколько брендов?", "Да. Один аккаунт поставщика может создавать предложения для разных брендов."],
+    ["Когда SKU считается одобренным?", "Только после финального решения коммерческого директора Bloom."],
+    ["Нужно ли переводить описание товаров?", "Свободный текст поставщика не переводится автоматически на этапе MVP."],
+  ];
+  return section("faq", "FAQ", "Короткие ответы на основные вопросы поставщиков.", `
+    <div class="faq-list">${faqs.map(([question, answer]) => `
+      <details class="faq-item"><summary>${question}</summary><p>${answer}</p></details>
+    `).join("")}</div>
+  `);
+}
+
+function section(id, title, lead, content) {
+  return `
+    <section id="${id}" class="landing-section">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="eyebrow">Supplier Portal</span>
+          <h2>${title}</h2>
+          <p>${lead}</p>
+        </div>
+        ${content}
+      </div>
+    </section>
+  `;
+}
+
+function landingFooter() {
+  return `
+    <footer class="landing-footer">
+      <div class="landing-container footer-inner">
+        ${bloomLogo("footer-logo")}
+        <span>© 2026 Bloom Beauty Uzbekistan · Supplier Portal</span>
+        <button class="btn-coral" onclick="showAuth('register')">Стать поставщиком</button>
+      </div>
+    </footer>
+  `;
+}
+
+function authPanel() {
+  return `
+    <div class="auth-overlay" role="dialog" aria-modal="true" aria-label="${state.authMode === "register" ? t("register") : t("login")}">
+      <div class="auth-modal">
+        <button class="modal-close" onclick="closeAuth()" aria-label="Закрыть">×</button>
+        <div class="auth-modal-brand">
+          ${bloomLogo("modal-logo")}
+          <p>${state.authMode === "register" ? "Создайте аккаунт поставщика Bloom" : "Войдите в рабочий портал Bloom"}</p>
+        </div>
+        ${state.error ? `<div class="error">${esc(state.error)}</div>` : ""}
+        <div class="tabs">
+          <button class="${state.authMode === "login" ? "primary" : "secondary"}" onclick="showAuth('login')">${t("login")}</button>
+          <button class="${state.authMode === "register" ? "primary" : "secondary"}" onclick="showAuth('register')">${t("register")}</button>
+        </div>
+        ${state.authMode === "register" ? registerForm() : loginForm()}
+        <p class="demo-note">${t("demo")}<br>${t("supplierDemo")} · ${t("managerDemo")} · ${t("directorDemo")}</p>
+      </div>
+    </div>
+  `;
+}
 
 function loginForm() {
   return `
