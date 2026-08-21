@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "db:init": "node scripts/init-supabase.mjs",
+    "user:ensure-superadmin": "node scripts/ensure-superadmin.mjs",
     "smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {

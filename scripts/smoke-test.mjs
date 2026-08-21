@@ -23,6 +23,7 @@ function client() {
 const supplier = client();
 const cm = client();
 const director = client();
+const superadmin = client();
 
 await supplier("/api/auth/login", {
   method: "POST",
@@ -106,6 +107,21 @@ await director(`/api/skus/${pending.id}/final-decision`, {
 const products = await director("/api/products");
 if (!products.products.some((product) => product.sourceSkuId === pending.id)) {
   throw new Error("Approved SKU did not create an approved product");
+}
+
+if (process.env.SUPERADMIN_LOGIN && process.env.SUPERADMIN_PASSWORD) {
+  await superadmin("/api/auth/login", {
+    method: "POST",
+    body: { email: process.env.SUPERADMIN_LOGIN, password: process.env.SUPERADMIN_PASSWORD },
+  });
+
+  const [users, allProposals] = await Promise.all([superadmin("/api/users"), superadmin("/api/proposals")]);
+  if (!users.users.some((user) => user.role === "superadmin" && user.email === process.env.SUPERADMIN_LOGIN)) {
+    throw new Error("Superadmin account is missing from users dashboard");
+  }
+  if (!allProposals.proposals.some((item) => item.id === proposal.id)) {
+    throw new Error("Superadmin cannot see all proposals");
+  }
 }
 
 console.log(`OK ${proposal.id}: supplier -> CM -> director -> product`);

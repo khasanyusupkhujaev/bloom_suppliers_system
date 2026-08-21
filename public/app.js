@@ -2,6 +2,7 @@ const labels = {
   en: {
     subtitle: "Supplier Portal",
     login: "Login",
+    loginIdentifier: "Email / login",
     register: "Register supplier",
     email: "Email",
     password: "Password",
@@ -13,7 +14,9 @@ const labels = {
     managerDemo: "Manager: manager@bloom.test",
     cmDemo: "CM: cm1@bloom.test / cm2@bloom.test",
     directorDemo: "Director: director@bloom.test",
+    superadminDemo: "Superadmin: khusanyusupkhujaev",
     dashboard: "Proposals",
+    users: "Users",
     newProposal: "New proposal",
     profile: "Profile",
     assignments: "Assignments",
@@ -62,6 +65,7 @@ const labels = {
   ru: {
     subtitle: "Портал поставщика",
     login: "Войти",
+    loginIdentifier: "Email / логин",
     register: "Регистрация поставщика",
     email: "Email",
     password: "Пароль",
@@ -73,7 +77,9 @@ const labels = {
     managerDemo: "Менеджер: manager@bloom.test",
     cmDemo: "КМ: cm1@bloom.test / cm2@bloom.test",
     directorDemo: "Директор: director@bloom.test",
+    superadminDemo: "Суперадмин: khusanyusupkhujaev",
     dashboard: "Заявки",
+    users: "Пользователи",
     newProposal: "Новая заявка",
     profile: "Профиль",
     assignments: "Назначения",
@@ -133,6 +139,8 @@ let state = {
   proposals: [],
   products: [],
   notifications: [],
+  users: [],
+  suppliers: [],
   error: "",
 };
 
@@ -173,6 +181,14 @@ async function loadWorkspace() {
   state.proposals = proposals.proposals;
   state.products = products.products;
   state.notifications = notifications.notifications;
+  if (["admin", "superadmin"].includes(state.user.role)) {
+    const users = await api("/api/users");
+    state.users = users.users;
+    state.suppliers = users.suppliers;
+  } else {
+    state.users = [];
+    state.suppliers = [];
+  }
 }
 
 function render() {
@@ -382,7 +398,7 @@ function authPanel() {
           <button class="${state.authMode === "register" ? "primary" : "secondary"}" onclick="showAuth('register')">${t("register")}</button>
         </div>
         ${state.authMode === "register" ? registerForm() : loginForm()}
-        <p class="demo-note">${t("demo")}<br>${t("supplierDemo")} · ${t("managerDemo")} · ${t("directorDemo")}</p>
+        <p class="demo-note">${t("demo")}<br>${t("supplierDemo")} · ${t("managerDemo")} · ${t("directorDemo")} · ${t("superadminDemo")}</p>
       </div>
     </div>
   `;
@@ -391,7 +407,7 @@ function authPanel() {
 function loginForm() {
   return `
     <form class="grid" onsubmit="login(event)">
-      ${field("email", t("email"), "email", "sales@aurora.example")}
+      ${field("email", t("loginIdentifier"), "text", "sales@aurora.example")}
       ${field("password", t("password"), "password", "password123")}
       <div class="full actions"><button class="primary">${t("login")}</button></div>
     </form>
@@ -449,7 +465,8 @@ function shell() {
           ${nav("dashboard", t("dashboard"))}
           ${state.user.role === "supplier" ? nav("new", t("newProposal")) : ""}
           ${state.user.role === "supplier" ? nav("profile", t("profile")) : ""}
-          ${["manager", "admin"].includes(state.user.role) ? nav("assignments", t("assignments")) : ""}
+          ${["manager", "admin", "superadmin"].includes(state.user.role) ? nav("assignments", t("assignments")) : ""}
+          ${["admin", "superadmin"].includes(state.user.role) ? nav("users", t("users")) : ""}
           ${nav("products", t("products"))}
           ${nav("notifications", t("notifications"))}
         </nav>
@@ -488,6 +505,7 @@ function page() {
   if (state.page === "new") return newProposal();
   if (state.page === "profile") return profile();
   if (state.page === "assignments") return assignments();
+  if (state.page === "users") return usersDashboard();
   if (state.page === "products") return products();
   if (state.page === "notifications") return notifications();
   return dashboard();
@@ -527,14 +545,14 @@ function proposalTable() {
 }
 
 function managerAssign(proposal) {
-  if (!["manager", "admin"].includes(state.user.role)) return "";
+  if (!["manager", "admin", "superadmin"].includes(state.user.role)) return "";
   const cms = state.staff.filter((user) => user.role === "cm");
   return `<div class="row"><select id="assign-${proposal.id}">${cms.map((cm) => `<option value="${cm.email}" ${proposal.assignedCmEmail === cm.email ? "selected" : ""}>${esc(cm.name)}</option>`).join("")}</select><button class="secondary" onclick="assignProposal('${proposal.id}')">${t("assign")}</button></div>`;
 }
 
 function proposalDetail(proposal) {
-  const canCm = state.user.role === "cm";
-  const canDirector = state.user.role === "director";
+  const canDirector = state.user.role === "director" || state.user.role === "superadmin";
+  const canCm = state.user.role === "cm" || state.user.role === "superadmin";
   return `
     <section class="panel">
       <div class="head">
@@ -679,6 +697,27 @@ function assignments() {
         ${state.categories.map((category) => `<div class="field"><label>${esc(category)}</label><select name="${escAttr(category)}">${cms.map((cm) => `<option value="${cm.email}" ${state.categoryManagers[category] === cm.email ? "selected" : ""}>${esc(cm.name)}</option>`).join("")}</select></div>`).join("")}
         <div class="actions full"><button class="primary">${t("save")}</button></div>
       </form>
+    </section>
+  `;
+}
+
+function usersDashboard() {
+  return `
+    <section class="panel">
+      <div class="head"><div><h2>${t("users")}</h2><p>${state.users.length} accounts · ${state.suppliers.length} suppliers</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Supplier</th></tr></thead>
+          <tbody>${state.users.map((user) => `
+            <tr>
+              <td>${esc(user.name)}</td>
+              <td>${esc(user.email)}</td>
+              <td>${badge(user.role)}</td>
+              <td>${esc(user.supplier?.legalName || "-")}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      </div>
     </section>
   `;
 }
